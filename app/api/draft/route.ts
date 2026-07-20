@@ -73,15 +73,43 @@ export async function POST(request: Request) {
   }
 
   try {
-    const draft = await chat({
-      system: buildSystemPrompt(),
+    const system = buildSystemPrompt();
+    let draft = await chat({
+      system,
       user: buildUserPrompt(body),
       maxTokens: 8192,
       temperature: 0.7,
     });
-    return NextResponse.json({ draft });
+
+    // 분량이 1,500자(공백 포함) 미만이면 한 번 더 확장 요청.
+    if (cleanKorean(draft).length < 1500) {
+      const expanded = await chat({
+        system,
+        user: [
+          "다음 블로그 글이 너무 짧다. 내용(설명·팁·예시·후기)을 더 풍부하게 보강해서",
+          "공백 포함 1,500~2,000자로 다시 작성해줘. 구조(첫인사→목차→본문→마무리)는 유지하고",
+          "영어·한자 없이 자연스러운 한국어로만 써줘.",
+          "",
+          draft,
+        ].join("\n"),
+        maxTokens: 8192,
+        temperature: 0.7,
+      });
+      if (cleanKorean(expanded).length > cleanKorean(draft).length) {
+        draft = expanded;
+      }
+    }
+
+    return NextResponse.json({ draft: cleanKorean(draft) });
   } catch (e) {
     const message = e instanceof Error ? e.message : "초안 생성 실패";
     return NextResponse.json({ error: message }, { status: 502 });
   }
+}
+
+// 무료 모델이 가끔 섞는 한자(중국어) 등 CJK 표의문자를 제거해 한국어를 깔끔하게 유지.
+function cleanKorean(text: string): string {
+  return text
+    .replace(/[一-鿿㐀-䶿]/g, "")
+    .replace(/[ \t]{2,}/g, " ");
 }
