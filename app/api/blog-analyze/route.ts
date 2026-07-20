@@ -67,22 +67,25 @@ export async function POST(request: Request) {
   const titles = rss.titles.slice(0, 15);
 
   try {
-    // 1) 니치 + 대표키워드 파악
+    // 1) 니치 + 대표키워드 파악 (두 줄 형식으로 명확히)
     const nicheRaw = await chat({
       system: "당신은 블로그 분석가입니다. 간결하게 한국어로만 답합니다.",
       user: [
         "다음은 어떤 네이버 블로그의 최근 글 제목들이다.",
-        "이 블로그의 주제(니치)와, 대표 검색 키워드 1개를 파악해줘.",
-        '반드시 "니치 | 대표키워드" 한 줄로만 답해. (예: 국내여행 맛집 | 부산맛집)',
+        "이 블로그가 주로 다루는 주제(니치)와, 대표 검색 키워드 1개를 뽑아줘.",
+        "정확히 아래 두 줄 형식으로만 답해:",
+        "니치: (예: 국내여행·맛집)",
+        "대표키워드: (예: 부산맛집)",
         "",
         ...titles.map((t) => `- ${t}`),
       ].join("\n"),
-      maxTokens: 100,
+      maxTokens: 150,
       temperature: 0.3,
     });
-    const [nichePart, kwPart] = nicheRaw.split("|");
-    const niche = (nichePart ?? "").trim() || "여행";
-    const mainKeyword = (kwPart ?? "").replace(/[^가-힣A-Za-z0-9 ]/g, "").trim();
+    const nicheM = nicheRaw.match(/니치\s*[:：]\s*(.+)/);
+    const kwM = nicheRaw.match(/대표\s*키워드\s*[:：]\s*(.+)/);
+    const niche = (nicheM?.[1] ?? "").trim() || "여행·일상";
+    const mainKeyword = (kwM?.[1] ?? "").replace(/[^가-힣A-Za-z0-9 ]/g, "").trim();
 
     // 2) 강도 추정 (대표키워드로 이 블로그가 상위노출 되는지)
     const searchEnv = readNaverSearchEnv();
@@ -104,14 +107,18 @@ export async function POST(request: Request) {
     // 3) 수준 맞춤 글감 5개
     const ideasRaw = await chat({
       system:
-        "당신은 네이버 블로그 성장 코치입니다. 블로그 수준에 맞춰 실제로 상위노출 가능한 글감을 제안합니다.",
+        "당신은 네이버 블로그 성장 코치입니다. 블로그가 이미 다루는 분야와 톤에 맞춰, 수준에 맞는(상위노출 가능한) 글감을 제안합니다.",
       user: [
         `블로그 주제(니치): ${niche}`,
         `블로그 강도(추정): ${strength}`,
         `추천 전략: ${strategy}`,
         "",
-        "이 블로그가 지금 쓰면 좋은 글 5개를 제안해줘.",
-        '각 줄을 반드시 "제목 | 한줄이유" 형식으로, 번호·기호 없이 5줄로만.',
+        "이 블로그가 실제로 써온 최근 글 제목:",
+        ...titles.slice(0, 8).map((t) => `- ${t}`),
+        "",
+        "위 블로그의 분야·톤·결에 맞춰, 지금 쓰면 좋은 글 5개를 제안해줘.",
+        "블로그가 이미 다루는 분야(예: 국내여행·맛집·일상)를 벗어나 엉뚱한 주제로 튀지 말 것.",
+        '각 줄을 반드시 "제목 | 한줄이유" 형식으로, 번호·기호 없이 정확히 5줄로만.',
         "제목은 구체적이고 검색 의도에 맞게 한국어로.",
       ].join("\n"),
       maxTokens: 800,
