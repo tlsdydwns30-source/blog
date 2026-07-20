@@ -74,29 +74,36 @@ export async function POST(request: Request) {
 
   try {
     const system = buildSystemPrompt();
+    // Groq 무료 티어 분당 토큰 제한(TPM 6,000)에 맞춰 max_tokens 를 보수적으로.
+    // (2,000자 한국어 ≈ 3,000토큰 정도라 4,000이면 충분)
     let draft = await chat({
       system,
       user: buildUserPrompt(body),
-      maxTokens: 8192,
+      maxTokens: 4000,
       temperature: 0.7,
     });
 
-    // 분량이 1,500자(공백 포함) 미만이면 한 번 더 확장 요청.
+    // 분량이 1,500자(공백 포함) 미만이면 한 번 더 확장 시도.
+    // 무료 티어 분당 제한에 걸릴 수 있으므로 실패해도 원본 초안을 그대로 사용.
     if (cleanKorean(draft).length < 1500) {
-      const expanded = await chat({
-        system,
-        user: [
-          "다음 블로그 글이 너무 짧다. 내용(설명·팁·예시·후기)을 더 풍부하게 보강해서",
-          "공백 포함 1,500~2,000자로 다시 작성해줘. 구조(첫인사→목차→본문→마무리)는 유지하고",
-          "영어·한자 없이 자연스러운 한국어로만 써줘.",
-          "",
-          draft,
-        ].join("\n"),
-        maxTokens: 8192,
-        temperature: 0.7,
-      });
-      if (cleanKorean(expanded).length > cleanKorean(draft).length) {
-        draft = expanded;
+      try {
+        const expanded = await chat({
+          system,
+          user: [
+            "다음 블로그 글이 너무 짧다. 내용(설명·팁·예시·후기)을 더 풍부하게 보강해서",
+            "공백 포함 1,500~2,000자로 다시 작성해줘. 구조(첫인사→목차→본문→마무리)는 유지하고",
+            "영어·한자 없이 자연스러운 한국어로만 써줘.",
+            "",
+            draft,
+          ].join("\n"),
+          maxTokens: 4000,
+          temperature: 0.7,
+        });
+        if (cleanKorean(expanded).length > cleanKorean(draft).length) {
+          draft = expanded;
+        }
+      } catch {
+        // 확장 실패(주로 분당 토큰 제한) 시 원본 유지 — 502 대신 초안이라도 반환.
       }
     }
 
