@@ -77,7 +77,7 @@ async function chatOpenAI(opts: ChatOptions): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY 가 설정되지 않았습니다.");
   const baseUrl = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
-  const model = process.env.DRAFT_MODEL || "gpt-4o-mini";
+  const model = process.env.DRAFT_MODEL || "moonshotai/kimi-k2-instruct";
 
   const res = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
     method: "POST",

@@ -33,11 +33,12 @@ function buildUserPrompt(req: DraftRequest): string {
     ``,
     `[작성 규칙]`,
     `1) 구조: 첫인사(도입) → 목차 → 본문(소제목 여러 개) → 마무리(요약+행동유도).`,
-    `2) 분량: 공백 포함 약 2,000자.`,
+    `2) 분량: 공백(띄어쓰기) 포함 반드시 1,500자 이상 2,000자 이하. 1,500자 미만은 절대 금지. 짧으면 각 소제목의 설명·팁·예시를 더 풍부하게 늘려 반드시 1,500자를 넘길 것.`,
     `3) 메인 키워드는 글 전체에서 5~7회, 자연스럽게 배치.`,
     `4) 목차는 본문 소제목과 일치시킬 것.`,
     `5) 마크다운(##, ### 소제목)으로 작성.`,
     `6) 제공된 자료에 없는 구체 수치(가격/시간 등)는 지어내지 말 것.`,
+    `7) 영어 단어나 외국어를 섞지 말고 자연스러운 한국어로만 작성할 것.`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -75,7 +76,7 @@ export async function POST(request: Request) {
     const draft = await chat({
       system: buildSystemPrompt(),
       user: buildUserPrompt(body),
-      maxTokens: 4096,
+      maxTokens: 8192,
       temperature: 0.7,
     });
     return NextResponse.json({ draft });
