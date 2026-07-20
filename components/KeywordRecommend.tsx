@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import CopyButton from "@/components/CopyButton";
+import { BLOG_LEVELS, DEFAULT_LEVEL } from "@/lib/blogLevel";
 
 interface Rec {
   keyword: string;
@@ -77,6 +78,8 @@ function ratioBadge(ratio: number | null | undefined) {
 
 export default function KeywordRecommend() {
   const [seed, setSeed] = useState("");
+  const [level, setLevel] = useState(DEFAULT_LEVEL); // 블로그 지수
+  const [levelLabel, setLevelLabel] = useState("");
   const [path, setPath] = useState<string[]>([]); // 드릴다운 경로
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,13 +108,14 @@ export default function KeywordRecommend() {
       const res = await fetch("/api/keywords", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ seed: q }),
+        body: JSON.stringify({ seed: q, level }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || `요청 실패 (${res.status})`);
       setTop(data.top ?? []);
       setAll(data.all ?? []);
       setNote(data.note ?? "");
+      setLevelLabel(data.levelLabel ?? "");
     } catch (e) {
       setError(e instanceof Error ? e.message : "알 수 없는 오류");
     } finally {
@@ -163,9 +167,9 @@ export default function KeywordRecommend() {
     <section>
       <h2 className="text-lg font-bold text-slate-900">키워드 추천</h2>
       <p className="mt-1 text-sm text-slate-500">
-        주제를 입력하면 연관 키워드의 검색량·문서수·경쟁지수를 조회해{" "}
-        <b>황금 키워드 Top 5</b>를 추천합니다. 키워드를 <b>클릭하면 더 세부</b>로
-        파고들 수 있어요.
+        주제와 <b>내 블로그 지수</b>를 고르면, 그 지수로 <b>실제 상위노출 가능한
+        세부 키워드</b>(문서수 상한 이내)를 <b>경쟁지수 낮은 순</b>으로 추천합니다.
+        키워드를 <b>클릭하면 더 세부</b>로 파고들 수 있어요.
       </p>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -176,6 +180,21 @@ export default function KeywordRecommend() {
           placeholder="예: 여행, 오사카, 제주도 맛집"
           className="min-w-56 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
         />
+        <label className="flex items-center gap-1.5 text-sm text-slate-600">
+          <span className="whitespace-nowrap">내 블로그 지수</span>
+          <select
+            value={level}
+            onChange={(e) => setLevel(e.target.value)}
+            title="내 블로그의 최적화 정도. 낮을수록 더 작은(세부) 키워드를 추천합니다."
+            className="rounded-lg border border-slate-300 px-2 py-2 text-sm outline-none focus:border-brand-500"
+          >
+            {BLOG_LEVELS.map((l) => (
+              <option key={l.key} value={l.key}>
+                {l.label} (문서수 ≤ {l.maxDoc.toLocaleString("ko-KR")})
+              </option>
+            ))}
+          </select>
+        </label>
         <button
           onClick={() => run()}
           disabled={loading || !seed.trim()}
@@ -215,7 +234,10 @@ export default function KeywordRecommend() {
         <>
           <div className="mt-5">
             <h3 className="text-sm font-semibold text-slate-700">
-              🏆 오늘의 추천 Top 5
+              🏆 {levelLabel ? `${levelLabel} 기준 ` : ""}추천 세부 키워드
+              <span className="ml-1 font-normal text-slate-400">
+                (경쟁지수 낮은 순)
+              </span>
             </h3>
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
               {top.map((r, i) => (
@@ -233,16 +255,27 @@ export default function KeywordRecommend() {
                         "truncate text-sm font-medium text-slate-900"
                       )}
                     </div>
-                    <div className="flex flex-shrink-0 items-center gap-1.5 text-xs text-slate-500">
-                      <span>{r.totalSearch.toLocaleString("ko-KR")}회</span>
+                    <button
+                      onClick={() => showTopics(r)}
+                      className="flex-shrink-0 rounded-md border border-brand-300 bg-white px-2 py-0.5 text-xs font-medium text-brand-600 hover:bg-brand-100"
+                    >
+                      글감
+                    </button>
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                    <span>
+                      검색 {r.totalSearch.toLocaleString("ko-KR")}회
+                    </span>
+                    <span>
+                      문서{" "}
+                      {r.docCount != null
+                        ? r.docCount.toLocaleString("ko-KR") + "개"
+                        : "-"}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      경쟁지수{" "}
                       {r.ratio != null ? ratioBadge(r.ratio) : compBadge(r.compIdx)}
-                      <button
-                        onClick={() => showTopics(r)}
-                        className="rounded-md border border-brand-300 bg-white px-2 py-0.5 font-medium text-brand-600 hover:bg-brand-100"
-                      >
-                        글감
-                      </button>
-                    </div>
+                    </span>
                   </div>
                 </div>
               ))}
