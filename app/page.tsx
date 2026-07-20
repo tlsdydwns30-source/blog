@@ -24,7 +24,7 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <span className="text-2xl">🧭</span>
             <h1 className="text-xl font-bold text-slate-900">
-              블로그 워크플로우 도구
+              다용블
             </h1>
           </div>
           <p className="mt-1 text-sm text-slate-500">
