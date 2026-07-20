@@ -96,22 +96,28 @@ export async function POST(request: Request) {
     // 키워드 추출 실패 시 니치의 첫 토큰으로 대체(강도 추정용).
     if (!mainKeyword) mainKeyword = niche.split(/[·,\s/]/)[0] ?? "";
 
-    // 2) 강도 추정 (대표키워드로 이 블로그가 상위노출 되는지)
+    // 2) 강도(노출) 추정 — 이 블로그의 최근 글이 '자기 제목'으로 검색 시 상위에 뜨는지.
+    //    자기 글도 상위에 안 뜨면 신규/저품질(성장 필요) 신호.
     const searchEnv = readNaverSearchEnv();
     let rank: number | null = null;
-    if (searchEnv && mainKeyword) {
-      rank = await searchBlogRank(mainKeyword, blogId, searchEnv);
+    if (searchEnv) {
+      // 방금 올린 최신 글은 색인 전일 수 있어 2~4번째 글로 확인.
+      for (const t of titles.slice(1, 4)) {
+        const r = await searchBlogRank(t, blogId, searchEnv);
+        if (r != null) rank = rank == null ? r : Math.min(rank, r);
+      }
     }
-    let strength: "강함" | "보통" | "성장 중" = "성장 중";
-    if (rank != null && rank <= 5) strength = "강함";
-    else if (rank != null && rank <= 20) strength = "보통";
+    let strength: "노출 좋음" | "노출 보통" | "노출 약함" = "노출 약함";
+    if (rank != null && rank <= 3) strength = "노출 좋음";
+    else if (rank != null && rank <= 10) strength = "노출 보통";
 
     const strategy =
-      strength === "강함"
-        ? "경쟁 중간~높은 키워드도 공략 가능. 검색량 큰 주제 위주."
-        : strength === "보통"
-          ? "경쟁 낮음~중간 키워드 위주로. 검색량 적당한 주제."
-          : "경쟁 낮은(문서 적은) 키워드 위주로 차곡차곡 쌓기. 롱테일·구체 주제.";
+      strength === "노출 좋음"
+        ? "노출이 잘 되는 편. 검색량 큰 키워드도 도전해볼 만함."
+        : strength === "노출 보통"
+          ? "경쟁 낮음~중간 키워드 위주로 꾸준히 쌓기."
+          : "아직 상위노출이 약함. 경쟁 낮은(문서 적은) 롱테일·구체 주제부터 차곡차곡.";
+    void mainKeyword;
 
     // 3) 수준 맞춤 글감 5개
     const ideasRaw = await chat({

@@ -12,7 +12,7 @@ interface Result {
   blogId: string;
   niche: string;
   mainKeyword: string;
-  strength: "강함" | "보통" | "성장 중";
+  strength: "노출 좋음" | "노출 보통" | "노출 약함";
   rank: number | null;
   recentTitles: string[];
   ideas: Idea[];
@@ -20,9 +20,9 @@ interface Result {
 }
 
 const STRENGTH_STYLE: Record<string, string> = {
-  강함: "bg-brand-100 text-brand-700",
-  보통: "bg-amber-100 text-amber-700",
-  "성장 중": "bg-slate-100 text-slate-600",
+  "노출 좋음": "bg-brand-100 text-brand-700",
+  "노출 보통": "bg-amber-100 text-amber-700",
+  "노출 약함": "bg-slate-100 text-slate-600",
 };
 
 export default function BlogCoach() {
@@ -102,8 +102,8 @@ export default function BlogCoach() {
               </span>
               <span className="text-xs text-slate-400">
                 {result.rank != null
-                  ? `(대표키워드 ${result.rank}위 노출)`
-                  : "(대표키워드 상위 미노출)"}
+                  ? `(최근 글이 자기 제목 검색 ${result.rank}위)`
+                  : "(자기 글도 상위 미노출)"}
               </span>
             </div>
           </div>
