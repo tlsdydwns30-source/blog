@@ -11,24 +11,25 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
-/** 경쟁정도를 가중치로 (낮을수록 유리). 경쟁 낮은 키워드를 강하게 우대. */
-function compWeight(idx: string): number {
-  if (idx === "낮음") return 1;
-  if (idx === "중간") return 0.3;
-  if (idx === "높음") return 0.1;
-  return 0.5;
-}
-
-// 추천 대상에서 제외할 최소 월 검색량(노이즈 컷). 이보다 적으면 Top 추천 제외.
+// 추천 대상에서 제외할 최소 월 검색량(노이즈 컷).
 const MIN_SEARCH_FOR_TOP = 500;
 
+/** 경쟁정도 순위 (낮을수록 블로거가 상위노출 유리) */
+function tierRank(idx: string): number {
+  if (idx === "낮음") return 0;
+  if (idx === "중간") return 1;
+  if (idx === "높음") return 2;
+  return 1.5;
+}
+
 /**
- * 추천 점수 = 월 검색량 × 경쟁 가중치.
- *  - 검색량을 그대로(선형) 반영해 "검색 거의 없는" 키워드가 올라오지 않게 함.
- *  - 경쟁 낮음은 크게, 높음은 작게 → "검색 많고 경쟁 낮은" 황금 키워드가 상위.
+ * 황금 점수: "경쟁 낮은 것 먼저, 그 안에서 검색량 많은 순".
+ *  - 경쟁 티어를 큰 자릿수로 분리 → 낮음 > 중간 > 높음 순서 보장
+ *  - 같은 티어 안에서는 월 검색량이 큰 순
+ * (작은 블로그가 실제로 이길 수 있는 키워드를 우선 추천)
  */
 function score(r: RelKeyword): number {
-  return Math.round(r.totalSearch * compWeight(r.compIdx));
+  return (3 - tierRank(r.compIdx)) * 1_000_000_000 + r.totalSearch;
 }
 
 export async function POST(request: Request) {
@@ -60,21 +61,28 @@ export async function POST(request: Request) {
 
   try {
     const rows = await fetchRelatedKeywords(seed, env);
-    const scored = rows
+    const withScore = rows
       .filter((r) => r.keyword && r.totalSearch > 0)
-      .map((r) => ({ ...r, score: score(r) }))
-      .sort((a, b) => b.score - a.score);
+      .map((r) => ({ ...r, score: score(r) }));
 
-    // Top 추천: 검색량이 너무 적은 키워드는 제외(쓸모 없는 추천 방지)
-    const top = scored
-      .filter((r) => r.totalSearch >= MIN_SEARCH_FOR_TOP)
-      .slice(0, 5);
+    // Top 추천: 경쟁 낮은 것 우선(황금 점수), 검색량 최소치 이상만.
+    const golden = [...withScore].sort((a, b) => b.score - a.score);
+    const top =
+      golden.filter((r) => r.totalSearch >= MIN_SEARCH_FOR_TOP).slice(0, 5)
+        .length > 0
+        ? golden.filter((r) => r.totalSearch >= MIN_SEARCH_FOR_TOP).slice(0, 5)
+        : golden.slice(0, 5);
+
+    // 표: 전체를 검색량 많은 순으로(참고용 전체 그림).
+    const all = [...withScore]
+      .sort((a, b) => b.totalSearch - a.totalSearch)
+      .slice(0, 50);
 
     return NextResponse.json({
       seed,
-      top: top.length > 0 ? top : scored.slice(0, 5),
-      all: scored.slice(0, 50),
-      note: "검색량↑·경쟁↓ 순 추천. 상위노출은 네이버 랭킹(비공개) 특성상 보장이 아닌 참고용 추정입니다.",
+      top,
+      all,
+      note: "추천 Top은 '경쟁 낮은 것 우선, 그 안에서 검색량 순'. 아래 표는 검색량 순 전체. 상위노출은 네이버 랭킹(비공개) 특성상 보장이 아닌 참고용 추정입니다.",
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "키워드 조회 실패";
