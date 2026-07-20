@@ -45,6 +45,20 @@ function toNum(v: unknown): number {
   return 0;
 }
 
+/** HTML 태그 제거 + 주요 엔티티 디코드 (뉴스 제목 등 정리) */
+export function stripHtml(s: string): string {
+  return s
+    .replace(/<[^>]+>/g, "")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .trim();
+}
+
 // ── 네이버 검색 API (developers.naver.com) — 문서수 조회용 ──────────
 //   NAVER_CLIENT_ID / NAVER_CLIENT_SECRET
 export interface NaverSearchEnv {
@@ -161,6 +175,43 @@ export async function searchBlogRank(
     if (link.includes(blogId)) return i + 1;
   }
   return null;
+}
+
+export interface NewsItem {
+  title: string;
+  link: string;
+  desc: string;
+}
+
+/** 키워드 관련 네이버 뉴스 최신/유사 상위 몇 건 */
+export async function fetchNaverNews(
+  keyword: string,
+  env: NaverSearchEnv,
+  count = 3
+): Promise<NewsItem[]> {
+  const url = `https://openapi.naver.com/v1/search/news.json?query=${encodeURIComponent(
+    keyword
+  )}&display=${count}&sort=sim`;
+  const res = await fetch(url, {
+    headers: {
+      "X-Naver-Client-Id": env.clientId,
+      "X-Naver-Client-Secret": env.clientSecret,
+    },
+  });
+  if (!res.ok) return [];
+  const data = (await res.json()) as {
+    items?: Array<{
+      title?: string;
+      link?: string;
+      originallink?: string;
+      description?: string;
+    }>;
+  };
+  return (data.items ?? []).map((it) => ({
+    title: stripHtml(it.title ?? ""),
+    link: it.link ?? it.originallink ?? "",
+    desc: stripHtml(it.description ?? ""),
+  }));
 }
 
 export interface RelKeyword {

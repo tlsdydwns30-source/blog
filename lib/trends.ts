@@ -1,10 +1,21 @@
 // 구글 트렌드 (오늘의 급상승 검색어, 한국) — 서버 전용, 키 불필요
 //   RSS: https://trends.google.com/trending/rss?geo=KR
 
+function decode(s: string): string {
+  return s
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&nbsp;/g, " ");
+}
+
 function tag(xml: string, name: string): string {
   const m = xml.match(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`, "i"));
   if (!m) return "";
-  return m[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/, "$1").trim();
+  return decode(m[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/, "$1")).trim();
 }
 
 export interface TrendItem {

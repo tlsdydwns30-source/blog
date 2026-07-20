@@ -19,6 +19,18 @@ interface TopicIdea {
   desc: string;
 }
 
+interface NewsItem {
+  title: string;
+  link: string;
+  desc: string;
+}
+
+interface TopicData {
+  ideas: TopicIdea[];
+  followups: string[];
+  news: NewsItem[];
+}
+
 const COMP_STYLE: Record<string, string> = {
   낮음: "bg-brand-100 text-brand-700",
   중간: "bg-amber-100 text-amber-700",
@@ -74,7 +86,7 @@ export default function KeywordRecommend() {
 
   // 글감(제목) 상태
   const [topicsFor, setTopicsFor] = useState<string | null>(null);
-  const [topics, setTopics] = useState<TopicIdea[] | null>(null);
+  const [topics, setTopics] = useState<TopicData | null>(null);
   const [topicsLoading, setTopicsLoading] = useState(false);
 
   const run = async (term?: string) => {
@@ -123,9 +135,13 @@ export default function KeywordRecommend() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || `요청 실패 (${res.status})`);
-      setTopics(data.ideas ?? []);
+      setTopics({
+        ideas: data.ideas ?? [],
+        followups: data.followups ?? [],
+        news: data.news ?? [],
+      });
     } catch (e) {
-      setTopics([]);
+      setTopics({ ideas: [], followups: [], news: [] });
       setError(e instanceof Error ? e.message : "글감 생성 실패");
     } finally {
       setTopicsLoading(false);
@@ -250,32 +266,88 @@ export default function KeywordRecommend() {
               {topicsLoading && (
                 <p className="mt-2 text-sm text-slate-400">생성 중...</p>
               )}
-              {topics && topics.length > 0 && (
-                <ul className="mt-2 space-y-2">
-                  {topics.map((t, i) => (
-                    <li
-                      key={i}
-                      className="flex items-start justify-between gap-2 rounded-md bg-slate-50 px-3 py-2"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-slate-900">
-                          {t.title}
-                        </p>
-                        {t.desc && (
-                          <p className="mt-0.5 text-xs text-slate-500">
-                            {t.desc}
-                          </p>
-                        )}
-                      </div>
-                      <CopyButton text={t.title} label="제목 복사" />
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {topics && topics.length === 0 && !topicsLoading && (
-                <p className="mt-2 text-sm text-slate-400">
-                  글감을 생성하지 못했어요. 다시 시도해주세요.
-                </p>
+              {topics && (
+                <div className="mt-2 space-y-4">
+                  {/* 제목 아이디어 */}
+                  {topics.ideas.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500">
+                        📝 제목 아이디어
+                      </p>
+                      <ul className="mt-1 space-y-1.5">
+                        {topics.ideas.map((t, i) => (
+                          <li
+                            key={i}
+                            className="flex items-start justify-between gap-2 rounded-md bg-slate-50 px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-slate-900">
+                                {t.title}
+                              </p>
+                              {t.desc && (
+                                <p className="mt-0.5 text-xs text-slate-500">
+                                  {t.desc}
+                                </p>
+                              )}
+                            </div>
+                            <CopyButton text={t.title} label="복사" />
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* 후속질문 (소제목) */}
+                  {topics.followups.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500">
+                        🔎 사람들이 이어서 묻는 질문 (소제목으로 활용)
+                      </p>
+                      <ul className="mt-1 space-y-1">
+                        {topics.followups.map((q, i) => (
+                          <li
+                            key={i}
+                            className="flex items-start justify-between gap-2 text-sm text-slate-700"
+                          >
+                            <span>• {q}</span>
+                            <CopyButton text={q} label="복사" />
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* 관련 뉴스 */}
+                  {topics.news.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500">
+                        📰 관련 뉴스
+                      </p>
+                      <ul className="mt-1 space-y-1">
+                        {topics.news.map((n, i) => (
+                          <li key={i} className="text-xs text-slate-500">
+                            <a
+                              href={n.link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="hover:text-brand-600 hover:underline"
+                            >
+                              {n.title}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {topics.ideas.length === 0 &&
+                    topics.followups.length === 0 &&
+                    !topicsLoading && (
+                      <p className="text-sm text-slate-400">
+                        글감을 생성하지 못했어요. 다시 시도해주세요.
+                      </p>
+                    )}
+                </div>
               )}
               <p className="mt-3 text-xs text-slate-400">
                 제목을 복사해 &lsquo;초안 생성&rsquo; 탭 메인 키워드에 넣으면 바로
