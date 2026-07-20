@@ -67,25 +67,34 @@ export async function POST(request: Request) {
   const titles = rss.titles.slice(0, 15);
 
   try {
-    // 1) 니치 + 대표키워드 파악 (두 줄 형식으로 명확히)
+    // 1) 니치 + 대표키워드 파악 ("주제, 키워드" 콤마 형식 — 파싱 견고)
     const nicheRaw = await chat({
-      system: "당신은 블로그 분석가입니다. 간결하게 한국어로만 답합니다.",
+      system: "당신은 블로그 분석가입니다. 요청한 형식으로만, 다른 말 없이 답합니다.",
       user: [
         "다음은 어떤 네이버 블로그의 최근 글 제목들이다.",
-        "이 블로그가 주로 다루는 주제(니치)와, 대표 검색 키워드 1개를 뽑아줘.",
-        "정확히 아래 두 줄 형식으로만 답해:",
-        "니치: (예: 국내여행·맛집)",
-        "대표키워드: (예: 부산맛집)",
+        "이 블로그의 주제와 대표 검색 키워드 1개를,",
+        "다른 설명 없이 딱 한 줄 '주제, 대표키워드' 형식으로만 답해.",
+        "예시: 국내여행·맛집, 부산맛집",
         "",
         ...titles.map((t) => `- ${t}`),
       ].join("\n"),
-      maxTokens: 150,
-      temperature: 0.3,
+      maxTokens: 60,
+      temperature: 0.2,
     });
-    const nicheM = nicheRaw.match(/니치\s*[:：]\s*(.+)/);
-    const kwM = nicheRaw.match(/대표\s*키워드\s*[:：]\s*(.+)/);
-    const niche = (nicheM?.[1] ?? "").trim() || "여행·일상";
-    const mainKeyword = (kwM?.[1] ?? "").replace(/[^가-힣A-Za-z0-9 ]/g, "").trim();
+    const line =
+      nicheRaw
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .find((s) => s.includes(",")) ?? nicheRaw.trim();
+    const [nichePart, kwPart] = line.split(",");
+    const niche =
+      (nichePart ?? "").replace(/^(주제|니치)\s*[:：]?\s*/, "").trim() ||
+      "여행·일상";
+    let mainKeyword = (kwPart ?? "")
+      .replace(/[^가-힣A-Za-z0-9 ]/g, "")
+      .trim();
+    // 키워드 추출 실패 시 니치의 첫 토큰으로 대체(강도 추정용).
+    if (!mainKeyword) mainKeyword = niche.split(/[·,\s/]/)[0] ?? "";
 
     // 2) 강도 추정 (대표키워드로 이 블로그가 상위노출 되는지)
     const searchEnv = readNaverSearchEnv();
