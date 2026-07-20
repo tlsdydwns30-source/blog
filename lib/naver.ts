@@ -71,15 +71,23 @@ export async function fetchBlogDocCount(
   const url = `https://openapi.naver.com/v1/search/blog.json?query=${encodeURIComponent(
     keyword
   )}&display=1`;
-  const res = await fetch(url, {
-    headers: {
-      "X-Naver-Client-Id": env.clientId,
-      "X-Naver-Client-Secret": env.clientSecret,
-    },
-  });
-  if (!res.ok) return null;
-  const data = (await res.json()) as { total?: unknown };
-  return toNum(data.total);
+
+  // 초당 제한(429) 등 일시적 실패 시 1회 재시도.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await fetch(url, {
+      headers: {
+        "X-Naver-Client-Id": env.clientId,
+        "X-Naver-Client-Secret": env.clientSecret,
+      },
+    });
+    if (res.ok) {
+      const data = (await res.json()) as { total?: unknown };
+      return toNum(data.total);
+    }
+    if (res.status !== 429 && res.status !== 500) return null;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  return null;
 }
 
 export interface RelKeyword {

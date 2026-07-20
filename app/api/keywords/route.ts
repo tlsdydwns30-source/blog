@@ -82,9 +82,15 @@ export async function POST(request: Request) {
     const searchEnv = readNaverSearchEnv();
     if (searchEnv) {
       const N = Math.min(all.length, 30);
-      const counts = await Promise.all(
-        all.slice(0, N).map((r) => fetchBlogDocCount(r.keyword, searchEnv))
-      );
+      // 네이버 검색 API 초당 제한을 피하려 5개씩 나눠서 순차 조회.
+      const counts: (number | null)[] = [];
+      for (let i = 0; i < N; i += 5) {
+        const chunk = all.slice(i, Math.min(i + 5, N));
+        const part = await Promise.all(
+          chunk.map((r) => fetchBlogDocCount(r.keyword, searchEnv))
+        );
+        counts.push(...part);
+      }
       all = all.map((r, i) => {
         const docCount = i < N ? counts[i] : null;
         const ratio =
