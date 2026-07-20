@@ -9,6 +9,8 @@ interface Rec {
   totalSearch: number;
   compIdx: string;
   score: number;
+  docCount?: number | null;
+  ratio?: number | null;
 }
 
 const COMP_STYLE: Record<string, string> = {
@@ -16,6 +18,34 @@ const COMP_STYLE: Record<string, string> = {
   중간: "bg-amber-100 text-amber-700",
   높음: "bg-rose-100 text-rose-700",
 };
+
+/** 경쟁지수(문서수÷검색량) 등급 — 낮을수록 황금 */
+function ratioBadge(ratio: number | null | undefined) {
+  if (ratio == null)
+    return <span className="text-slate-300">-</span>;
+  let label = "황금";
+  let cls = "bg-amber-100 text-amber-700";
+  if (ratio >= 5) {
+    label = "높음";
+    cls = "bg-rose-100 text-rose-700";
+  } else if (ratio >= 1) {
+    label = "보통";
+    cls = "bg-slate-100 text-slate-600";
+  } else if (ratio >= 0.1) {
+    label = "좋음";
+    cls = "bg-brand-100 text-brand-700";
+  }
+  return (
+    <span className="whitespace-nowrap tabular-nums">
+      {ratio.toLocaleString("ko-KR")}{" "}
+      <span
+        className={"rounded-full px-1.5 py-0.5 text-xs font-medium " + cls}
+      >
+        {label}
+      </span>
+    </span>
+  );
+}
 
 export default function KeywordRecommend() {
   const [seed, setSeed] = useState("");
@@ -126,9 +156,9 @@ export default function KeywordRecommend() {
                 <tr>
                   <th className="px-3 py-2 font-medium">키워드</th>
                   <th className="px-3 py-2 text-right font-medium">월 검색량</th>
-                  <th className="px-3 py-2 text-right font-medium">PC</th>
-                  <th className="px-3 py-2 text-right font-medium">모바일</th>
-                  <th className="px-3 py-2 font-medium">경쟁</th>
+                  <th className="px-3 py-2 text-right font-medium">문서수</th>
+                  <th className="px-3 py-2 font-medium">경쟁지수</th>
+                  <th className="px-3 py-2 font-medium">광고경쟁</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -141,11 +171,11 @@ export default function KeywordRecommend() {
                       {r.totalSearch.toLocaleString("ko-KR")}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums text-slate-500">
-                      {r.monthlyPc.toLocaleString("ko-KR")}
+                      {r.docCount != null
+                        ? r.docCount.toLocaleString("ko-KR")
+                        : "-"}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-slate-500">
-                      {r.monthlyMobile.toLocaleString("ko-KR")}
-                    </td>
+                    <td className="px-3 py-2">{ratioBadge(r.ratio)}</td>
                     <td className="px-3 py-2">{compBadge(r.compIdx)}</td>
                   </tr>
                 ))}

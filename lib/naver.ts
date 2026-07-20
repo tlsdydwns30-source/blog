@@ -45,6 +45,43 @@ function toNum(v: unknown): number {
   return 0;
 }
 
+// ── 네이버 검색 API (developers.naver.com) — 문서수 조회용 ──────────
+//   NAVER_CLIENT_ID / NAVER_CLIENT_SECRET
+export interface NaverSearchEnv {
+  clientId: string;
+  clientSecret: string;
+}
+
+export function readNaverSearchEnv(): NaverSearchEnv | null {
+  const clientId = process.env.NAVER_CLIENT_ID;
+  const clientSecret = process.env.NAVER_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return null;
+  return { clientId, clientSecret };
+}
+
+/**
+ * 키워드의 네이버 블로그 문서수(total)를 조회.
+ *  - 검색 API 블로그 검색의 total 값 = 해당 키워드로 존재하는 블로그 문서수(근사).
+ *  - 경쟁지수(문서수 ÷ 검색량) 계산의 분자로 사용.
+ */
+export async function fetchBlogDocCount(
+  keyword: string,
+  env: NaverSearchEnv
+): Promise<number | null> {
+  const url = `https://openapi.naver.com/v1/search/blog.json?query=${encodeURIComponent(
+    keyword
+  )}&display=1`;
+  const res = await fetch(url, {
+    headers: {
+      "X-Naver-Client-Id": env.clientId,
+      "X-Naver-Client-Secret": env.clientSecret,
+    },
+  });
+  if (!res.ok) return null;
+  const data = (await res.json()) as { total?: unknown };
+  return toNum(data.total);
+}
+
 export interface RelKeyword {
   keyword: string;
   /** 월 PC 검색수 */

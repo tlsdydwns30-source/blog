@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import {
   readNaverAdEnv,
   fetchRelatedKeywords,
+  readNaverSearchEnv,
+  fetchBlogDocCount,
   type RelKeyword,
 } from "@/lib/naver";
 
@@ -63,26 +65,49 @@ export async function POST(request: Request) {
     const rows = await fetchRelatedKeywords(seed, env);
     const withScore = rows
       .filter((r) => r.keyword && r.totalSearch > 0)
-      .map((r) => ({ ...r, score: score(r) }));
+      .map((r) => ({
+        ...r,
+        score: score(r),
+        docCount: null as number | null,
+        ratio: null as number | null,
+      }));
 
-    // Top 추천: 경쟁 낮은 것 우선(황금 점수), 검색량 최소치 이상만.
-    const golden = [...withScore].sort((a, b) => b.score - a.score);
-    const top =
-      golden.filter((r) => r.totalSearch >= MIN_SEARCH_FOR_TOP).slice(0, 5)
-        .length > 0
-        ? golden.filter((r) => r.totalSearch >= MIN_SEARCH_FOR_TOP).slice(0, 5)
-        : golden.slice(0, 5);
-
-    // 표: 전체를 검색량 많은 순으로(참고용 전체 그림).
-    const all = [...withScore]
+    // 표시 대상: 검색량 많은 순 상위 50.
+    let all = [...withScore]
       .sort((a, b) => b.totalSearch - a.totalSearch)
       .slice(0, 50);
+
+    // 네이버 검색 API 키가 있으면 문서수 + 경쟁지수(문서수÷검색량) 채우기.
+    // (호출량/지연 고려해 검색량 상위 30개만 조회, 나머지는 null)
+    const searchEnv = readNaverSearchEnv();
+    if (searchEnv) {
+      const N = Math.min(all.length, 30);
+      const counts = await Promise.all(
+        all.slice(0, N).map((r) => fetchBlogDocCount(r.keyword, searchEnv))
+      );
+      all = all.map((r, i) => {
+        const docCount = i < N ? counts[i] : null;
+        const ratio =
+          docCount != null && r.totalSearch > 0
+            ? Number((docCount / r.totalSearch).toFixed(2))
+            : null;
+        return { ...r, docCount, ratio };
+      });
+    }
+
+    // Top 추천: 경쟁 낮은 것 우선(황금 점수), 검색량 최소치 이상만.
+    const golden = [...all].sort((a, b) => b.score - a.score);
+    const eligible = golden.filter((r) => r.totalSearch >= MIN_SEARCH_FOR_TOP);
+    const top = (eligible.length > 0 ? eligible : golden).slice(0, 5);
 
     return NextResponse.json({
       seed,
       top,
       all,
-      note: "추천 Top은 '경쟁 낮은 것 우선, 그 안에서 검색량 순'. 아래 표는 검색량 순 전체. 상위노출은 네이버 랭킹(비공개) 특성상 보장이 아닌 참고용 추정입니다.",
+      hasDocCount: !!searchEnv,
+      note: searchEnv
+        ? "추천 Top은 경쟁 낮은 것 우선. 문서수·경쟁지수(문서수÷검색량)는 낮을수록 유리. 상위노출은 네이버 랭킹(비공개) 특성상 참고용 추정입니다."
+        : "추천 Top은 경쟁 낮은 것 우선, 검색량 순. 문서수를 보려면 NAVER_CLIENT_ID/SECRET 설정이 필요합니다.",
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "키워드 조회 실패";
