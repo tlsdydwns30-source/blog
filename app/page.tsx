@@ -2,15 +2,17 @@
 
 import { useState } from "react";
 import KeywordRecommend from "@/components/KeywordRecommend";
+import TrendToday from "@/components/TrendToday";
 import BlogCoach from "@/components/BlogCoach";
 import GoldenKeyword from "@/components/GoldenKeyword";
 import PriceCompare from "@/components/PriceCompare";
 import DraftGenerator from "@/components/DraftGenerator";
 
-type TabKey = "recommend" | "coach" | "keyword" | "price" | "draft";
+type TabKey = "recommend" | "trend" | "coach" | "keyword" | "price" | "draft";
 
 const TABS: { key: TabKey; label: string; emoji: string }[] = [
   { key: "recommend", label: "키워드 추천", emoji: "🔥" },
+  { key: "trend", label: "오늘의 트렌드", emoji: "📈" },
   { key: "coach", label: "내 블로그 코칭", emoji: "🧑‍🏫" },
   { key: "keyword", label: "골든키워드", emoji: "🔑" },
   { key: "price", label: "가격비교표", emoji: "💰" },
@@ -70,6 +72,7 @@ export default function Home() {
       {/* 콘텐츠 */}
       <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
         {tab === "recommend" && <KeywordRecommend />}
+        {tab === "trend" && <TrendToday />}
         {tab === "coach" && <BlogCoach />}
         {tab === "keyword" && <GoldenKeyword />}
         {tab === "price" && <PriceCompare />}
