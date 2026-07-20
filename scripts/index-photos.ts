@@ -1,55 +1,110 @@
 /**
- * [스캐폴드] 사진 배치 색인 스크립트
+ * 사진 배치 색인 스크립트
  *
- * 목적: 수만 장 사진에 대해 (1) 캡션 생성 → (2) 캡션 임베딩 → (3) photos 테이블 저장.
+ * 폴더 안 이미지들을 → 캡션 생성(Vision) → 임베딩 → Supabase photos 테이블에 저장.
+ * 이미 색인된 사진(storage_path 중복)은 건너뜀 → 재실행 안전(idempotent).
  *
- * 실행(활성화 후):
- *   npm i @supabase/supabase-js
- *   npm run index-photos
+ * 실행:
+ *   PHOTOS_DIR=/path/to/photos npm run index-photos
+ *   또는  npm run index-photos -- /path/to/photos [지역명]
  *
  * 필요 환경변수(.env.local):
  *   SUPABASE_URL, SUPABASE_SERVICE_KEY
- *   OPENAI_API_KEY            (캡션 생성 + 임베딩. 또는 COHERE_API_KEY)
+ *   VISION_API_KEY / VISION_BASE_URL / VISION_MODEL  (캡션)
+ *   EMBED_API_KEY  / EMBED_BASE_URL  / EMBED_MODEL   (임베딩, 1536차원)
  *
- * 비용 절감:
- *   - 수만 장은 반드시 배치로. 임베딩은 Batch API 사용 시 비용 대폭 절감.
- *   - 이미 색인된 storage_path 는 건너뛰어 재실행 안전(idempotent)하게 만들 것.
- *
- * 차원 주의:
- *   - vector(1536) = OpenAI text-embedding-3-small. 모델 바꾸면 schema.sql 도 함께 수정.
+ * 사전: supabase/schema.sql 을 Supabase 에 적용해둘 것.
  */
 
-const EMBED_DIM = 1536;
+import { readdirSync, readFileSync, statSync } from "fs";
+import path from "path";
+import { getServiceClient } from "../lib/supabase";
+import { captionImage } from "../lib/vision";
+import { embed } from "../lib/embed";
 
-interface PhotoJob {
-  storagePath: string;
-  location?: string;
+const IMAGE_EXT = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
+const MIME: Record<string, string> = {
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+};
+
+function listImages(dir: string): string[] {
+  const out: string[] = [];
+  for (const name of readdirSync(dir)) {
+    const full = path.join(dir, name);
+    const st = statSync(full);
+    if (st.isDirectory()) out.push(...listImages(full));
+    else if (IMAGE_EXT.has(path.extname(name).toLowerCase())) out.push(full);
+  }
+  return out;
 }
 
+function toDataUrl(file: string): string {
+  const ext = path.extname(file).toLowerCase();
+  const mime = MIME[ext] ?? "image/jpeg";
+  const b64 = readFileSync(file).toString("base64");
+  return `data:${mime};base64,${b64}`;
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 async function main() {
-  const url = process.env.SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_KEY;
-  if (!url || !serviceKey) {
-    console.error("SUPABASE_URL / SUPABASE_SERVICE_KEY 가 필요합니다.");
+  const dir = process.env.PHOTOS_DIR || process.argv[2];
+  const location = process.argv[3] || null;
+  if (!dir) {
+    console.error("사용법: npm run index-photos -- <사진폴더> [지역명]");
     process.exit(1);
   }
 
-  // TODO(활성화 순서):
-  // 1) Supabase Storage 버킷에서 사진 목록 나열 → PhotoJob[] 구성
-  //    (이미 photos 에 있는 storage_path 제외 → 재실행 안전)
-  // 2) 배치 단위로 각 사진 캡션 생성 (Vision 모델). 지역(location) 메타 함께.
-  // 3) 캡션을 임베딩 (가능하면 Batch API). 차원 = EMBED_DIM 확인.
-  // 4) photos upsert (storage_path unique).
-  //
-  //   const client = createClient(url, serviceKey, { auth: { persistSession: false } });
-  //   const jobs = await listUnindexedPhotos(client);
-  //   for (const batch of chunk(jobs, 100)) { ...캡션→임베딩→upsert... }
+  const client = getServiceClient();
+  const files = listImages(dir);
+  console.log(`이미지 ${files.length}장 발견. 색인 시작...`);
+
+  let done = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (const file of files) {
+    const storagePath = path.relative(dir, file) || path.basename(file);
+
+    // 이미 색인됐는지 확인
+    const { data: exists } = await client
+      .from("photos")
+      .select("id")
+      .eq("storage_path", storagePath)
+      .maybeSingle();
+    if (exists) {
+      skipped++;
+      continue;
+    }
+
+    try {
+      const caption = await captionImage(toDataUrl(file));
+      const embedding = await embed(caption);
+      const { error } = await client.from("photos").insert({
+        storage_path: storagePath,
+        caption,
+        location,
+        embedding,
+      });
+      if (error) throw new Error(error.message);
+      done++;
+      if (done % 20 === 0) console.log(`  ...${done}장 완료`);
+      // 무료 티어 rate limit 여유
+      await sleep(400);
+    } catch (e) {
+      failed++;
+      console.warn(`  실패: ${storagePath} — ${(e as Error).message}`);
+      await sleep(1000);
+    }
+  }
 
   console.log(
-    `[index-photos] 스캐폴드 상태입니다. 임베딩 차원=${EMBED_DIM}. ` +
-      `@supabase/supabase-js 설치 + TODO 구현 후 사용하세요.`
+    `완료. 신규 ${done} · 건너뜀 ${skipped} · 실패 ${failed} (총 ${files.length})`
   );
-  void ({} as PhotoJob); // 타입 참조 유지 (미사용 경고 방지)
 }
 
 main().catch((e) => {

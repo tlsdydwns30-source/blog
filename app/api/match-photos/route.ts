@@ -1,22 +1,12 @@
 import { NextResponse } from "next/server";
-import { readSupabaseEnv } from "@/lib/supabase";
+import { readSupabaseEnv, getServiceClient } from "@/lib/supabase";
+import { embed } from "@/lib/embed";
 
-// [스캐폴드 — 미배포]
-// 글 문단 ↔ 사진 벡터 검색.
-//
-// 흐름(설계):
-//   1) 요청으로 받은 문단 텍스트를 임베딩 API로 벡터화 (OpenAI text-embedding-3-small = 1536차원)
-//   2) Supabase RPC match_photos(query_embedding, match_count, filter_location) 호출
-//      → pgvector 코사인 유사도 상위 N개 사진 반환
-//   3) storage_path → 공개 URL 로 변환해 응답
-//
-// 활성화 전제:
-//   - Supabase 프로젝트 + supabase/schema.sql 적용 (photos 테이블, match_photos RPC)
-//   - scripts/index-photos.ts 로 사진 라이브러리 사전 색인
-//   - OPENAI_API_KEY (또는 COHERE_API_KEY) 설정
-//   - vector(1536) 차원을 사용 임베딩 모델과 일치시킬 것
-
+// 글 문단 ↔ 사진 벡터 매칭
+//  - 문단 텍스트를 임베딩 → Supabase RPC match_photos 로 유사 사진 상위 N개
+//  - 사전 준비: supabase/schema.sql 적용 + scripts/index-photos 로 사진 색인
 export const runtime = "nodejs";
+export const maxDuration = 30;
 
 interface MatchRequest {
   text?: string;
@@ -39,24 +29,31 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json({ error: "JSON 파싱 실패." }, { status: 400 });
   }
-  if (!body.text || !body.text.trim()) {
+  const text = (body.text ?? "").trim();
+  if (!text) {
     return NextResponse.json(
       { error: "text(문단) 필드는 필수입니다." },
       { status: 400 }
     );
   }
 
-  // TODO(활성화):
-  //   const embedding = await embed(body.text);
-  //   const client = getServiceClient();
-  //   const { data, error } = await client.rpc("match_photos", {
-  //     query_embedding: embedding,
-  //     match_count: body.matchCount ?? 3,
-  //     filter_location: body.filterLocation ?? null,
-  //   });
-  //   ...storage 공개 URL 매핑 후 반환
-  return NextResponse.json(
-    { error: "아직 구현되지 않음(스캐폴드). README 다음 단계 참고." },
-    { status: 501 }
-  );
+  try {
+    const queryEmbedding = await embed(text);
+    const client = getServiceClient();
+    const { data, error } = await client.rpc("match_photos", {
+      query_embedding: queryEmbedding,
+      match_count: body.matchCount ?? 3,
+      filter_location: body.filterLocation ?? null,
+    });
+    if (error) {
+      return NextResponse.json(
+        { error: `match_photos RPC 오류: ${error.message}` },
+        { status: 502 }
+      );
+    }
+    return NextResponse.json({ photos: data ?? [] });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "사진 매칭 실패";
+    return NextResponse.json({ error: message }, { status: 502 });
+  }
 }
