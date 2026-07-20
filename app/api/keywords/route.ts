@@ -101,10 +101,36 @@ export async function POST(request: Request) {
       });
     }
 
-    // Top 추천: 경쟁 낮은 것 우선(황금 점수), 검색량 최소치 이상만.
-    const golden = [...all].sort((a, b) => b.score - a.score);
-    const eligible = golden.filter((r) => r.totalSearch >= MIN_SEARCH_FOR_TOP);
-    const top = (eligible.length > 0 ? eligible : golden).slice(0, 5);
+    // Top 추천
+    let top: typeof all;
+    if (searchEnv) {
+      // 실제 경쟁지수 기반: 검색량/문서수(=효율)가 높을수록 황금.
+      //  → 검색은 많고 문서(경쟁 글)는 적은 키워드가 위로.
+      const eff = (r: (typeof all)[number]) =>
+        r.docCount && r.docCount > 0 ? r.totalSearch / r.docCount : -1;
+      top = all
+        .filter(
+          (r) =>
+            r.totalSearch >= MIN_SEARCH_FOR_TOP &&
+            r.docCount != null &&
+            r.docCount > 0
+        )
+        .sort((a, b) => eff(b) - eff(a))
+        .slice(0, 5);
+      // 문서수를 못 받은 게 많아 5개 미만이면 광고경쟁도 기준으로 채움.
+      if (top.length < 5) {
+        const fill = [...all]
+          .sort((a, b) => b.score - a.score)
+          .filter((r) => !top.includes(r))
+          .slice(0, 5 - top.length);
+        top = [...top, ...fill];
+      }
+    } else {
+      // 문서수 키가 없으면 광고경쟁도(낮음>중간>높음) 기반.
+      const golden = [...all].sort((a, b) => b.score - a.score);
+      const eligible = golden.filter((r) => r.totalSearch >= MIN_SEARCH_FOR_TOP);
+      top = (eligible.length > 0 ? eligible : golden).slice(0, 5);
+    }
 
     return NextResponse.json({
       seed,
