@@ -11,17 +11,24 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
-/** 경쟁정도를 가중치로 (낮을수록 유리) */
+/** 경쟁정도를 가중치로 (낮을수록 유리). 경쟁 낮은 키워드를 강하게 우대. */
 function compWeight(idx: string): number {
   if (idx === "낮음") return 1;
-  if (idx === "중간") return 0.5;
-  if (idx === "높음") return 0.2;
-  return 0.4;
+  if (idx === "중간") return 0.3;
+  if (idx === "높음") return 0.1;
+  return 0.5;
 }
 
-/** 추천 점수: 검색량(로그 스케일) × 경쟁 가중치 */
+// 추천 대상에서 제외할 최소 월 검색량(노이즈 컷). 이보다 적으면 Top 추천 제외.
+const MIN_SEARCH_FOR_TOP = 500;
+
+/**
+ * 추천 점수 = 월 검색량 × 경쟁 가중치.
+ *  - 검색량을 그대로(선형) 반영해 "검색 거의 없는" 키워드가 올라오지 않게 함.
+ *  - 경쟁 낮음은 크게, 높음은 작게 → "검색 많고 경쟁 낮은" 황금 키워드가 상위.
+ */
 function score(r: RelKeyword): number {
-  return Math.log10(r.totalSearch + 1) * compWeight(r.compIdx);
+  return Math.round(r.totalSearch * compWeight(r.compIdx));
 }
 
 export async function POST(request: Request) {
@@ -55,12 +62,17 @@ export async function POST(request: Request) {
     const rows = await fetchRelatedKeywords(seed, env);
     const scored = rows
       .filter((r) => r.keyword && r.totalSearch > 0)
-      .map((r) => ({ ...r, score: Number(score(r).toFixed(3)) }))
+      .map((r) => ({ ...r, score: score(r) }))
       .sort((a, b) => b.score - a.score);
+
+    // Top 추천: 검색량이 너무 적은 키워드는 제외(쓸모 없는 추천 방지)
+    const top = scored
+      .filter((r) => r.totalSearch >= MIN_SEARCH_FOR_TOP)
+      .slice(0, 5);
 
     return NextResponse.json({
       seed,
-      top: scored.slice(0, 5),
+      top: top.length > 0 ? top : scored.slice(0, 5),
       all: scored.slice(0, 50),
       note: "검색량↑·경쟁↓ 순 추천. 상위노출은 네이버 랭킹(비공개) 특성상 보장이 아닌 참고용 추정입니다.",
     });
