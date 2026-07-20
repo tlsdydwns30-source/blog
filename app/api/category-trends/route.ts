@@ -10,7 +10,8 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 
 // 분야 → 씨앗 키워드 (수정 쉽게 이 표만 고치면 됨)
-export const CATEGORY_SEEDS: Record<string, string[]> = {
+// 주의: Next.js route 파일은 GET/POST/config 외 export 금지 → 로컬 const 로 둠.
+const CATEGORY_SEEDS: Record<string, string[]> = {
   여행: ["여행", "국내여행", "해외여행"],
   경제: ["주식", "부동산", "재테크"],
   IT: ["아이폰", "챗gpt", "노트북추천"],
@@ -20,7 +21,7 @@ export const CATEGORY_SEEDS: Record<string, string[]> = {
   육아: ["육아", "이유식", "유아교육"],
 };
 
-export const CATEGORIES = Object.keys(CATEGORY_SEEDS);
+const CATEGORIES = Object.keys(CATEGORY_SEEDS);
 
 export async function POST(request: Request) {
   const env = readNaverAdEnv();
