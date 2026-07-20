@@ -90,6 +90,79 @@ export async function fetchBlogDocCount(
   return null;
 }
 
+/** URL 또는 아이디에서 네이버 블로그 ID 추출 */
+export function parseBlogId(input: string): string | null {
+  const s = input.trim();
+  if (!s) return null;
+  const m = s.match(/blog\.naver\.com\/([^/?#\s]+)/i);
+  if (m) return m[1];
+  // URL 이 아니면 아이디 자체로 간주 (영문/숫자/언더스코어/하이픈)
+  if (/^[A-Za-z0-9_-]+$/.test(s)) return s;
+  return null;
+}
+
+function extractTag(xml: string, tag: string): string {
+  const m = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "i"));
+  if (!m) return "";
+  return m[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/, "$1").trim();
+}
+
+export interface BlogRss {
+  titles: string[];
+  dates: string[];
+}
+
+/** 네이버 블로그 RSS 로 최근 글 제목/날짜 수집 (공개 데이터) */
+export async function fetchNaverBlogRss(
+  blogId: string
+): Promise<BlogRss | null> {
+  const res = await fetch(`https://rss.blog.naver.com/${blogId}.xml`, {
+    headers: { "user-agent": "Mozilla/5.0" },
+  });
+  if (!res.ok) return null;
+  const xml = await res.text();
+  const items = xml.match(/<item>[\s\S]*?<\/item>/gi) ?? [];
+  const titles: string[] = [];
+  const dates: string[] = [];
+  for (const it of items) {
+    const t = extractTag(it, "title");
+    const d = extractTag(it, "pubDate");
+    if (t) titles.push(t);
+    if (d) dates.push(d);
+  }
+  return { titles, dates };
+}
+
+/**
+ * 특정 키워드로 블로그 검색 시, 이 블로그가 상위 몇 위에 노출되는지.
+ *  - 블로그 강도(최적화 여부) 추정용 신호. (없으면 null)
+ */
+export async function searchBlogRank(
+  query: string,
+  blogId: string,
+  env: NaverSearchEnv
+): Promise<number | null> {
+  const url = `https://openapi.naver.com/v1/search/blog.json?query=${encodeURIComponent(
+    query
+  )}&display=30`;
+  const res = await fetch(url, {
+    headers: {
+      "X-Naver-Client-Id": env.clientId,
+      "X-Naver-Client-Secret": env.clientSecret,
+    },
+  });
+  if (!res.ok) return null;
+  const data = (await res.json()) as {
+    items?: Array<{ link?: string; bloggerlink?: string }>;
+  };
+  const items = data.items ?? [];
+  for (let i = 0; i < items.length; i++) {
+    const link = `${items[i].link ?? ""}${items[i].bloggerlink ?? ""}`;
+    if (link.includes(blogId)) return i + 1;
+  }
+  return null;
+}
+
 export interface RelKeyword {
   keyword: string;
   /** 월 PC 검색수 */
