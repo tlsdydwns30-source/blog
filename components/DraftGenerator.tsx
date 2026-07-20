@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import CopyButton from "@/components/CopyButton";
+import PhotoSuggest from "@/components/PhotoSuggest";
 
 const TONES = ["친근한 반말", "정중한 존댓말", "정보전달 위주", "감성 에세이"];
 
@@ -131,6 +132,8 @@ export default function DraftGenerator() {
           <div className="mt-1 whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm leading-relaxed text-slate-800">
             {draft}
           </div>
+
+          <PhotoSuggest draft={draft} />
         </div>
       )}
     </section>
