@@ -9,7 +9,12 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "index-photos": "tsx scripts/index-photos.ts"
+    "index-photos": "tsx scripts/index-photos.ts",
+    "crew": "tsx crew/run.ts",
+    "crew:a": "tsx crew/a-analyze.ts",
+    "crew:b": "tsx crew/b-topics.ts",
+    "crew:c": "tsx crew/c-write.ts",
+    "crew:d": "tsx crew/d-photos.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.45.4",

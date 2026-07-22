@@ -29,3 +29,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# crew (직원 크루) — 생성물·개인 설정은 커밋하지 않음
+/crew/data/
+/crew/output/
+/crew/config.json
