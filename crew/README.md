@@ -42,6 +42,11 @@ npm run index-photos -- /사진폴더 [지역명]
 
 ## 3) 실행
 
+> ⚠️ **A직원은 네이버 접속이 필요합니다.** Claude Code **웹(클라우드) 세션은 네이버를
+> 네트워크 정책으로 차단**하므로 A직원이 못 돕니다(fetch·브라우저 모두 프록시에서 막힘).
+> **내 PC에서 실행**하거나, 클라우드라면 환경 네트워크 허용목록에 네이버 호스트를
+> 추가해야 합니다. (B·C는 Anthropic 키면 클라우드에서도 동작, Groq은 클라우드 차단.)
+
 ```bash
 npm run crew          # A(7일 이상 지났으면)→B→C(1번 주제)→D → PASTE.md 생성
 npm run crew:a        # A만: 전체 글 재수집·월별 분석
@@ -49,6 +54,12 @@ npm run crew:b        # B만: 이번 시기 주제 5개
 npm run crew:c 2      # C만: 2번 주제로 초안
 npm run crew:d        # D만: 최근 초안에 사진 매칭
 ```
+
+### A직원 수집기 (브라우저 vs HTTP)
+- 기본은 **브라우저(내 크롬)** — 네이버 본문이 iframe·JS라 더 안정적. 시스템 크롬을
+  자동 사용(`channel:"chrome"`), 없으면 `npx playwright install chromium` 후 사용.
+- `CREW_COLLECTOR=http npm run crew:a` — 순수 fetch로 수집(크롬 불필요, 파싱 취약).
+- 브라우저 실행이 실패하면 자동으로 HTTP 폴백.
 
 옵션(환경변수):
 - `CREW_FORCE_ANALYZE=1` — A직원 강제 재수집

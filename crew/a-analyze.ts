@@ -16,8 +16,10 @@ import {
   fetchPostBody,
   humanDelay,
   type PostMeta,
+  type PostBody,
 } from "./lib/naverBlog";
 import { blogDir, writeJson, readJson } from "./lib/store";
+import type { Browser } from "playwright-core";
 
 export interface StoredPost extends PostMeta {
   bodyText?: string;
@@ -77,13 +79,65 @@ function pickSample(posts: PostMeta[], limit: number): PostMeta[] {
   return picked.slice(0, limit);
 }
 
+// 수집기 선택: 기본 브라우저(내 PC, 네이버 iframe/JS에 안정적).
+// CREW_COLLECTOR=http 로 순수 fetch 사용. 브라우저 실행 실패 시 http로 폴백.
+type Collector = {
+  meta: (
+    blogId: string,
+    o: { onProgress?: (n: number) => void }
+  ) => Promise<PostMeta[]>;
+  body: (blogId: string, logNo: string) => Promise<PostBody>;
+  close: () => Promise<void>;
+};
+
+async function makeCollector(): Promise<Collector> {
+  const mode = (process.env.CREW_COLLECTOR ?? "browser").toLowerCase();
+  if (mode !== "http") {
+    try {
+      const { launchBrowser, fetchAllPostMetaBrowser, fetchPostBodyBrowser } =
+        await import("./lib/naverBrowser");
+      const browser: Browser = await launchBrowser();
+      console.log("[A직원] 수집기: 브라우저(크롬)");
+      return {
+        meta: (blogId, o) => fetchAllPostMetaBrowser(browser, blogId, o),
+        body: (blogId, logNo) => fetchPostBodyBrowser(browser, blogId, logNo),
+        close: () => browser.close(),
+      };
+    } catch (e) {
+      console.warn(
+        `[A직원] 브라우저 실행 실패 → HTTP 수집기로 폴백: ${(e as Error).message.split("\n")[0]}`
+      );
+    }
+  }
+  console.log("[A직원] 수집기: HTTP(fetch)");
+  return {
+    meta: (blogId, o) => fetchAllPostMeta(blogId, o),
+    body: (blogId, logNo) => fetchPostBody(blogId, logNo),
+    close: async () => {},
+  };
+}
+
 export async function runAnalyze(): Promise<void> {
   const cfg = loadConfig();
   const blogId = blogIdOf(cfg);
   const dir = blogDir(blogId);
 
+  const collector = await makeCollector();
+  try {
+    await collectAndSave(cfg, blogId, dir, collector);
+  } finally {
+    await collector.close();
+  }
+}
+
+async function collectAndSave(
+  cfg: ReturnType<typeof loadConfig>,
+  blogId: string,
+  dir: string,
+  collector: Collector
+): Promise<void> {
   console.log(`[A직원] 블로그 "${blogId}" 전체 글 목록 수집 중...`);
-  const meta = await fetchAllPostMeta(blogId, {
+  const meta = await collector.meta(blogId, {
     onProgress: (n) => process.stdout.write(`\r  수집: ${n}건`),
   });
   process.stdout.write("\n");
@@ -119,7 +173,7 @@ export async function runAnalyze(): Promise<void> {
           parseStatus: cache.parseStatus,
         });
       } else {
-        const body = await fetchPostBody(blogId, p.logNo);
+        const body = await collector.body(blogId, p.logNo);
         base.bodyText = body.bodyText;
         base.charCount = body.bodyText.length;
         base.imageCount = body.imageCount;
