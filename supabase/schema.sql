@@ -60,7 +60,9 @@ create table if not exists photos (
   id            bigint generated always as identity primary key,
   storage_path  text not null unique,   -- Supabase Storage 경로
   caption       text,
-  location      text,                    -- 지역 필터용 (예: "오사카")
+  location      text,                    -- 지역 필터용 (예: "오사카"). GPS→역지오코딩 자동 태깅
+  lat           double precision,        -- EXIF GPS 위도 (있으면)
+  lng           double precision,        -- EXIF GPS 경도 (있으면)
   embedding     vector(1536),
   created_at    timestamptz not null default now()
 );
